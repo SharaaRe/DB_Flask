@@ -1,5 +1,8 @@
+from mmap import MAP_DENYWRITE
+from time import strftime
 from flask import Flask, render_template, request, url_for, redirect, session
 from flask_mysqldb import MySQL
+from datetime import datetime
 
 app = Flask(__name__)
 app.debug = True
@@ -8,10 +11,10 @@ app.secret_key = 'BAD_SECRET_KEY'
 #######################
 ## STUDENT: Fill in your AWS host, username, password, and database name in the quotes below.
 #######################
-app.config['MYSQL_HOST'] = ''
-app.config['MYSQL_USER'] = ''
-app.config['MYSQL_PASSWORD'] = ''
-app.config['MYSQL_DB'] = ''
+app.config['MYSQL_HOST'] = 'dbsystemscourse.cc0lydrdidjv.us-east-1.rds.amazonaws.com'
+app.config['MYSQL_USER'] = 'admin'
+app.config['MYSQL_PASSWORD'] = 'n0tSecurE27'
+app.config['MYSQL_DB'] = 'dbsystemscourse'
 
 mysql = MySQL(app)
 
@@ -42,7 +45,10 @@ def all_posts():
     ## Save the results from your SQL query as a variable called posts
     ## Close your mysql cursor object.
     #######################
-
+    cur = mysql.connection.cursor()
+    query = 'SELECT * FROM post'
+    cur.execute(query)
+    posts = cur.fetchall()
     return render_template('posts.html', posts=posts)
 
 
@@ -59,7 +65,11 @@ def home():
     ## Save the results from your SQL query as a variable called user_top_posts
     ## Close your mysql cursor object.
     #######################
-        
+    cur = mysql.connection.cursor()
+    query = f'SELECT * FROM posts WHERE user_id={user_id} LIMIT 5'
+    cur.execute(query)
+    user_top_posts = cur.fetchall()
+    
     if request.method == 'POST':
         search_text = request.form['search_by_title']
 
@@ -73,6 +83,10 @@ def home():
         ## Save the results from your SQL query as a variable called search_posts
         ## Close your mysql cursor object.
         #######################
+        cur = mysql.conneciton.cursor()
+        query = f"SELECT * FROM post WHERE title LIKE '%{search_text}%'"
+        cur.execute(query)
+        search_posts = cur.fetchall()
 
         return render_template('home.html', posts=user_top_posts, search_posts=search_posts)
     else:
@@ -92,10 +106,20 @@ def getPost(postId):
     ##    3. Get the current user's upvote/downvote for the current post ID; store the results as votes
     ## Close your mysql cursor object.
     #######################
-
+    post_query = f'SELECT * FROM post WHERE post_id={postId}'
+    comment_query = f'SELECT * FROM comment WHERE  post_id={postId}'
+    votes_query = f'select * FROM votes WHERE post_id={postId}'
+    
+    cur = mysql.connection.cursor()
+    cur.execute(post_query)
+    post = cur.fetchone()
+    cur.execute(comment_query)
+    comments = cur.fetchall()
+    votes = cur.execute(votes_query).fetchall()
+    
     if request.method == 'POST':
         comment = request.form['comment']
-
+        
         #######################
         ## STUDENT: 
         ## Create a mysql cursor with the connection you opened on line 16
@@ -105,7 +129,10 @@ def getPost(postId):
         ## Send all SQL queries to the database needed to insert the new comment into the database
         ## Close your mysql cursor object.
         #######################
-
+        insert_query = f"INSERT INTO post ('comment', 'post_id', 'user_id') \
+            VALUES ('{comment}', '{postId}', '{user_id}')"
+        cur.execute(insert_query)
+        #TODO get new comment too
         return render_template('post.html', post=post, comments=comments, userVote = votes, current_userId = int(user_id)) 
     else:
         return render_template('post.html', post=post, comments=comments, userVote = votes, current_userId = int(user_id))
@@ -127,7 +154,10 @@ def createPost():
         ## Send all SQL queries to the database needed to insert the new post into the database
         ## Close your mysql cursor object.
         #######################
-
+        cur = mysql.connection.curosr()
+        query = f"INSERT INTO post ('title', 'content', 'user_id')\
+            VALUES ('{title}', '{content}', {user_id})"
+        cur.execut(query)
         return redirect('/posts')
     else:
         return render_template('createPost.html')
@@ -151,7 +181,9 @@ def vote(postId):
         ## Send all SQL queries to the database needed to insert the user's new/updated vote into the database
         ## Close your mysql cursor object.
         #######################
-
+        cur = mysql.connection.cursor()
+        query = f"INSERT INTO vote ('user_id', 'type') VALUES ({user_id}, '{vote_type}'"
+        cur.execute(query)
         return redirect('/post/'+postId)
 
 @app.route('/comment/delete/<commentId>/<postId>', methods=['POST'])
@@ -166,7 +198,9 @@ def deleteComment(commentId, postId):
         ## Send all SQL queries to the database needed to remove the comment from the database
         ## Close your mysql cursor object.
         ####################### 
-
+        cur = mysql.connection.cursor()
+        query = f"DELETE FROM comment WHERE post_id={postId} AND comment_id={commentId}"
+        cur.execute(query)
         return redirect('/post/'+postId)
 
 @app.route('/post/delete/<postId>', methods=['POST'])
@@ -182,7 +216,15 @@ def deletePost(postId):
         ##    these into account!
         ## Close your mysql cursor object.
         #######################       
-
+        cur = mysql.connection.cursor()
+        delete_post_query = f"DELETE FROM post WHERE post_id={postId}"
+        delete_comment_query = f"DELETE FROM comment WHERE post_id={postId}"
+        delete_vote_query = f"DELETE FROM vote WHERE post_id={postId}"
+        
+        cur.execute(delete_post_query)
+        cur.execute(delete_comment_query)
+        cur.execute(delete_vote_query)
+        mysql.connection.commit()
         return redirect('/posts')
 
 @app.route('/post/edit/<postId>', methods=['POST','GET'])
@@ -201,7 +243,10 @@ def editPost(postId):
         ## Send all SQL queries to the database needed to edit the post in the database
         ## Close your mysql cursor object.
         #######################       
-
+        cur = mysql.connection.cursor()
+        query = f"UPDATE post title='{title}', content='{content}' WHERE post_id={postId}"
+        cur.execute(query)
+        mysql.connection.commit()
         return redirect('/post/'+postId)
     else:
         #######################
@@ -213,7 +258,9 @@ def editPost(postId):
         ## Store the results from your query as post
         ## Close your mysql cursor object.
         #######################
-
+        cur = mysql.connection.cursor()
+        query = f"SELECT * FROM post WHERE post_id={postId}"
+        post = cur.fetchone()
         return render_template('editPost.html', post=post)
 
 if __name__ == '__main__':
